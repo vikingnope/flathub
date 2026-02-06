@@ -1,20 +1,20 @@
 id: nl.jknaapen.fladder
-runtime: org.gnome.Platform
-runtime-version: '48'
-sdk: org.gnome.Sdk
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.llvm18
+  - org.freedesktop.Sdk.Extension.llvm20
 
-command: fladder
+command: Fladder
 
 add-extensions:
-  org.freedesktop.Platform.ffmpeg-full:
-    directory: lib/ffmpeg
-    version: '24.08'
+  org.freedesktop.Platform.codecs-extra:
+    directory: lib/codecs
+    version: '25.08'
     add-ld-path: .
 
 cleanup-commands:
-  - mkdir -p /app/lib/ffmpeg
+  - mkdir -p /app/lib/codecs
 
 finish-args:
   - --share=ipc
@@ -59,21 +59,6 @@ modules:
           type: git
           tag-pattern: ^v([\d.]+)$
     modules:
-      - name: ffnvcodec
-        buildsystem: simple
-        build-commands:
-          - make install PREFIX=/app
-        cleanup:
-          - /lib/pkgconfig
-          - /include
-        sources:
-          - type: git
-            url: https://github.com/FFmpeg/nv-codec-headers.git
-            tag: n13.0.19.0
-            commit: e844e5b26f46bb77479f063029595293aa8f812d
-            x-checker-data:
-              type: git
-              tag-pattern: ^n([\d.]+)$
       - shared-modules/luajit/luajit.json
       - name: libass
         config-opts:
@@ -97,6 +82,7 @@ modules:
           - -DCMAKE_BUILD_TYPE=Release
           - -DCMAKE_INSTALL_LIBDIR=lib
           - -DBUILD_BINARY=OFF
+          - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         cleanup:
           - /lib/*.a
           - /lib/pkgconfig
@@ -111,6 +97,7 @@ modules:
               url: https://www.freedesktop.org/software/uchardet/releases/
               version-pattern: uchardet-(\d+\.\d+\.\d+)\.tar\.xz
               url-template: https://www.freedesktop.org/software/uchardet/releases/uchardet-$version.tar.xz
+
       - name: libplacebo
         buildsystem: meson
         config-opts:
@@ -119,40 +106,25 @@ modules:
         sources:
           - type: git
             url: https://code.videolan.org/videolan/libplacebo.git
-            tag: v7.349.0
-            commit: 1fd3c7bde7b943fe8985c893310b5269a09b46c5
+            tag: v7.351.0
+            commit: 3188549fba13bbdf3a5a98de2a38c2e71f04e21e
+          - type: patch
+            path: libplacebo-python3.13.patch
             x-checker-data:
               type: git
               tag-pattern: ^v([\d.]+)$
 
-  - name: zenity
-    buildsystem: meson
-    sources:
-      - type: git
-        url: https://gitlab.gnome.org/GNOME/zenity.git
-        tag: 4.0.3
-        commit: 7f7ac1840cfd914dfac69d947f0849dc50b0f695
 
   - name: fladder
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/llvm18/bin:/run/build/fladder/flutter/bin
+      append-path: /usr/lib/sdk/llvm20/bin:/run/build/fladder/flutter/bin
       env:
         CC: clang
         CXX: clang++
         PUB_CACHE: /run/build/fladder/.pub-cache
     build-commands:
       - ls -la /run/build/fladder/
-      
-      # Extract mdk-sdk to FVP's expected directory (use absolute paths)
-      - mkdir -p linux/flutter/ephemeral/.plugin_symlinks/fvp/linux
-      - tar -xf /run/build/fladder/mdk-sdk-linux-x64.tar.xz -C linux/flutter/ephemeral/.plugin_symlinks/fvp/linux
-
-      - sed -i 's|^fvp_setup_deps()|# fvp_setup_deps()|' linux/flutter/ephemeral/.plugin_symlinks/fvp/linux/CMakeLists.txt || true
-       
-      # Verify it's there
-      - ls -la linux/flutter/ephemeral/.plugin_symlinks/fvp/linux/
-      
       # Build with --no-pub
       - flutter build linux --release --no-pub
       
@@ -160,7 +132,7 @@ modules:
       - ./install-bundle.sh
       
       - install -Dm644 flatpak/Fladder.desktop /app/share/applications/${FLATPAK_ID}.desktop
-      - install -Dm644 icons/fladder_icon.svg /app/share/icons/hicolor/scalable/apps/${FLATPAK_ID}.svg
+      - install -Dm644 icons/production/fladder_icon_512.png /app/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
       - install -Dm644 flatpak/${FLATPAK_ID}.metainfo.xml /app/share/metainfo/${FLATPAK_ID}.metainfo.xml
     sources:
       - type: script
@@ -171,17 +143,28 @@ modules:
           - echo "Found bundle at: $BUNDLE_DIR"
           - mkdir -p /app/bin
           - cp -rv "$BUNDLE_DIR"/* /app/bin/
-          - mv /app/bin/Fladder /app/bin/fladder
-          - chmod +x /app/bin/fladder
+          - chmod +x /app/bin/Fladder
       - type: git
         url: https://github.com/DonutWare/Fladder.git
-        tag: v0.8.0
-        commit: a00b5255992ca4b6d5ba5eb5513e960ed780c198
+        tag: v0.9.0
+        commit: 6f92d4c5cc9cf1cb0707c1e0c686ca79687c0f05
+
+      # Manual entries for media_kit_libs_linux (git dependency)
       - type: file
-        url: https://sourceforge.net/projects/mdk-sdk/files/nightly/mdk-sdk-linux-x64.tar.xz
-        sha256: fe0116a3b73bfc01dd87d81ba0cd854e33d68ef78699c57deb8d843fea953600
-        dest-filename: mdk-sdk-linux-x64.tar.xz
+        only-arches:
+          - x86_64
+        url: https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz
+        sha256: 2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb
+        dest: build/linux/x64/release
+        dest-filename: mimalloc-2.1.2.tar.gz
+      - type: file
+        only-arches:
+          - aarch64
+        url: https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.2.tar.gz
+        sha256: 2b1bff6f717f9725c70bf8d79e4786da13de8a270059e4ba0bdd262ae7be46eb
+        dest: build/linux/arm64/release
+        dest-filename: mimalloc-2.1.2.tar.gz
       - type: git
         url: https://github.com/flutter/flutter.git
-        tag: 3.35.1
+        tag: 3.35.7
         dest: flutter
